@@ -62,7 +62,8 @@ const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
 const T = ms => DEBUG ? Math.max(300, ms/10) : ms;
 const CONFIG = {
-  audioBase: 'audio/'   // audio/phonemes/{m,n,p,t,a,i}.mp3  audio/words/{word}.mp3
+  audioBase: 'audio/',   // audio/phonemes/{m,n,p,t,a,i}.mp3  audio/words/{word}.mp3
+  submitUrl: ''          // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
 };
 
 /* =====================  STIMULI  ===================== */
@@ -570,8 +571,16 @@ function buildData(){
 async function finish(){
   const data=buildData(), json=JSON.stringify(data,null,2);
   try{ localStorage.setItem('alphabet_study_'+S.pid, json); }catch(e){}
-  page('<h2>All done — thank you!</h2><p>Your responses are saved in this browser.</p>'+
-    '<p class="mute">Researcher export: download the files below.</p><div id="dl"></div>');
+  let sent='';
+  if(CONFIG.submitUrl){
+    try{
+      const r=await fetch(CONFIG.submitUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:json});
+      const result=await r.json();
+      sent=(result.success===true)?'Your data was sent to the researcher.':'Data send uncertain — please also download the file below.';
+    }catch(e){ sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
+  }
+  page('<h2>All done — thank you!</h2><p>'+(sent||'Your responses are saved in this browser.')+'</p>'+
+    '<p class="mute">Researcher export: download the file below.</p><div id="dl"></div>');
   const dl=document.getElementById('dl');
   const add=(blob,name)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.textContent='Download '+name; a.style.display='block'; a.style.margin='6px 0'; dl.appendChild(a); };
   add(new Blob([json],{type:'application/json'}), S.pid+'_data.json');
