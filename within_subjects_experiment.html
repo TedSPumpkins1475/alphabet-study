@@ -574,8 +574,8 @@ async function finish(){
   let sent='';
   if(CONFIG.submitUrl){
     try{
-      const fd=new FormData(); fd.append('data',json);
-      await fetch(CONFIG.submitUrl,{method:'POST',body:fd,mode:'no-cors'});
+      const url=CONFIG.submitUrl+'?data='+encodeURIComponent(json);
+      await fetch(url,{method:'GET',mode:'no-cors'});
       sent='Your data was sent to the researcher.';
     }catch(e){ sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
   }
