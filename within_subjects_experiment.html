@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alphabet Learning Study (PSY300 Lab 7, within-subjects)</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#1d2330;--mute:#5b6475;--accent:#2f5fd0;--ok:#2e9e5b;--bad:#d64545;--line:#d9dde5}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #app{max-width:820px;margin:0 auto;padding:24px 16px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 30px}
+  h2{margin-top:0}
+  button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 16px;cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);margin-top:18px}
+  label{display:block;margin:8px 0}
+  .mute{color:var(--mute);font-size:.92em}
+  .warn{color:var(--bad)}
+  .progress{color:var(--mute);font-size:.85em;text-align:right}
+  .target{display:flex;justify-content:center;gap:14px;margin:18px 0;direction:ltr}
+  /* Alphabet A uses Hebrew-specific fonts; Alphabet B uses math/symbol fonts.
+     The combined stack handles both — Hebrew fonts fall back to system fonts for
+     non-Hebrew Unicode (arrows, math) so both alphabets render correctly. */
+  .sym{font-family:"Noto Sans Hebrew","Arial Hebrew","Noto Sans","Segoe UI Symbol",system-ui,sans-serif;font-size:96px;line-height:1.1;direction:ltr;unicode-bidi:isolate}
+  .grid{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:14px 0;direction:ltr}
+  .grid button{width:92px;height:92px;padding:0;font-family:"Noto Sans Hebrew","Arial Hebrew","Noto Sans","Segoe UI Symbol",system-ui,sans-serif;font-size:50px}
+  .grid button.ok{background:#dff4e7;border-color:var(--ok)}
+  .grid button.bad{background:#fbe0e0;border-color:var(--bad)}
+  .slots{display:flex;justify-content:center;gap:10px;margin:14px 0;direction:ltr}
+  .slot{width:78px;height:86px;border:2px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:46px;cursor:pointer;font-family:"Noto Sans Hebrew","Arial Hebrew","Noto Sans","Segoe UI Symbol",system-ui,sans-serif}
+  .slot.full{border-style:solid;border-color:var(--accent)}
+  .inst{text-align:center;color:var(--mute)}
+  .fix{font-size:60px;text-align:center;padding:90px 0;color:var(--mute)}
+  .meter{height:12px;background:#e8ebf1;border-radius:6px;overflow:hidden;margin:8px 0}
+  .meter>div{height:100%;width:0;background:var(--ok)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:640px){.cols{grid-template-columns:1fr}.card{padding:20px 16px}}
+  .wcard,.rrow{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:7px 0;display:flex;align-items:center;gap:10px}
+  .wcard{cursor:pointer;user-select:none}
+  .wcard.sel{border-color:var(--accent);background:#e8effd;box-shadow:0 0 0 2px var(--accent) inset}
+  .wcard b{width:22px;color:var(--mute)}
+  .wtxt{font-size:30px;direction:ltr;unicode-bidi:bidi-override;font-family:"Noto Sans Hebrew","Arial Hebrew","Noto Sans","Segoe UI Symbol",system-ui,sans-serif;flex:1}
+  .wtxt.plain{unicode-bidi:normal;font-family:inherit;font-size:22px}
+  .cnt{color:var(--mute);font-size:.8em}
+  .rrow .lbl{flex:1}
+  .badges span{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;padding:0 7px;margin-left:3px;font-size:.8em}
+  .tog.on{background:#dff4e7;border-color:var(--ok)}
+  .alpha-badge{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;padding:2px 10px;font-size:.85em;margin-left:8px;vertical-align:middle}
+  .alpha-badge.b{background:#7b4fc9}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+'use strict';
+
+/* =====================  CONFIG  ===================== */
+const Q = new URLSearchParams(location.search);
+const DEBUG = Q.has('debug');
+const T = ms => DEBUG ? Math.max(300, ms/10) : ms;
+const CONFIG = {
+  audioBase: 'audio/'   // audio/phonemes/{m,n,p,t,a,i}.mp3  audio/words/{word}.mp3
+};
+
+/* =====================  STIMULI  ===================== */
+// Phoneme set — same for both alphabets
+const P = ['a','m','n','t','i','p'];
+
+// Alphabet A: Hebrew-derived symbols (Law et al., 2018)
+// Phoneme order:  /ɑ/  /m/  /n/  /t/  /i/  /p/
+const GL_A = ['ם','צ','ש','ר','ט','פ'];
+
+// Alphabet B: Aurebesh-derived symbols (aurebesh.org), Unicode approximations.
+// Same six phonemes, visually distinct symbol set.
+// /ɑ/  /m/  /n/  /t/  /i/  /p/
+const GL_B = ['↗', 'Ξ', 'Ψ', '⊥', '↙', '⊢'];
+
+// TTS fallback strings — pronounce the phoneme sound, not the letter name.
+//   a → "ah" (/ɑ/),  i → "ee" (/i/),  m → "muh",  n → "nuh"
+//   p → "puh",  t → "cha" (/tʃ/ — matches the voice used in recordings)
+const PH_TXT = {m:'muh', n:'nuh', p:'puh', t:'cha', a:'ah', i:'ee'};
+
+// Respell a CVCV word into phonemic syllables so TTS says e.g. "pah nee" for 'pani'.
+const RESPELL_C = {m:'m', n:'n', p:'p', t:'ch'};
+const RESPELL_V = {a:'ah', i:'ee'};
+const respell = w => {
+  const parts = [];
+  for(let i = 0; i < w.length; i += 2){
+    const c = RESPELL_C[w[i]]   || w[i];
+    const v = RESPELL_V[w[i+1]] || w[i+1] || '';
+    parts.push(c + v);
+  }
+  return parts.join(' ');
+};
+
+// Alphabet A word lists — identical to the between-subjects design
+const WW_TRAIN_A    = ['pani','mapi','tama','nini','nata','tipi'];
+const TEST_PRAC_A   = ['pani','mapi','tama','nini'];
+const TEST_UNT_A    = ['pini','pata','mipi','mima','mati','nama','titi','pana','mipa','napa','nima','tati','tima','pina','napi','tita'];
+
+// Alphabet B word lists — different phoneme sequences to reduce cross-alphabet interference.
+// Training words do not overlap with Alphabet A training words.
+const WW_TRAIN_B    = ['nipi','nimi','tapi','titi','pima','mapa'];
+const TEST_PRAC_B   = ['nipi','nimi','tapi','titi'];
+const TEST_UNT_B    = ['mapi','nini','tama','pana','nami','pina','mita','nata','tipa','tima','mati','pini','mata','pani','timi','papi'];
+
+// Practice symbols for response-method demos (not part of either alphabet)
+const DEMO_SYMS = ['◆','▲','●','■','★','✚'];
+
+/* =====================  COUNTERBALANCING  ===================== */
+// 4 versions vary which alphabet is hand-written and which is taught first.
+//   Version 0: Hand=A first,  Select=B second
+//   Version 1: Select=A first, Hand=B second
+//   Version 2: Hand=B first,  Select=A second
+//   Version 3: Select=B first, Hand=A second
+// This fully crosses alphabet order × training method, equating exposure.
+const vParam = Q.get('v');
+const version = (vParam !== null && vParam >= 0 && vParam <= 3)
+  ? +vParam
+  : Math.floor(Math.random() * 4);
+
+const alphaOrder = (version < 2) ? ['A','B'] : ['B','A'];
+const condA = (version === 0 || version === 2) ? 'hand' : 'select';
+const condB = (condA === 'hand') ? 'select' : 'hand';
+
+/* =====================  STATE  ===================== */
+// Independent mapping versions for each alphabet — rotates which glyph maps to which phoneme.
+const mapVerA = Q.has('mapA') ? (+Q.get('mapA') % 6) : Math.floor(Math.random() * 6);
+const mapVerB = Q.has('mapB') ? (+Q.get('mapB') % 6) : Math.floor(Math.random() * 6);
+
+const g_A = {}, g_B = {};
+P.forEach((p, j) => { g_A[p] = GL_A[(j + mapVerA) % 6]; g_B[p] = GL_B[(j + mapVerB) % 6]; });
+
+// Grid positions are fixed per alphabet throughout that alphabet's training.
+const gridA = shuffle(GL_A);
+const gridB = shuffle(GL_B);
+
+const toGlyphsA = w => [...w].map(c => g_A[c]);
+const toGlyphsB = w => [...w].map(c => g_B[c]);
+
+function getAlphaConfig(alpha){
+  if(alpha === 'A') return {
+    g: g_A, GL: GL_A, grid: gridA, cond: condA,
+    toGlyphs: toGlyphsA, ww: WW_TRAIN_A, tp: TEST_PRAC_A, tu: TEST_UNT_A,
+    label: 'Alphabet A', mapVer: mapVerA, badge: 'A'
+  };
+  return {
+    g: g_B, GL: GL_B, grid: gridB, cond: condB,
+    toGlyphs: toGlyphsB, ww: WW_TRAIN_B, tp: TEST_PRAC_B, tu: TEST_UNT_B,
+    label: 'Alphabet B', mapVer: mapVerB, badge: 'B'
+  };
+}
+
+const S = {
+  pid: Q.get('pid') || ('P' + Math.random().toString(36).slice(2,8).toUpperCase()),
+  version, condA, condB, alphaOrder,
+  mapVerA, mapVerB, glyphMapA: g_A, glyphMapB: g_B,
+  startedAt: new Date().toISOString(),
+  trials: {A:[], B:[]}, practice: [], test: {A:null, B:null},
+  adherence: null, audio: [], photo: null
+};
+
+/* =====================  HELPERS  ===================== */
+const app = document.getElementById('app');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const now = () => performance.now();
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function page(html){ app.innerHTML = '<div class="card">'+html+'</div>'; window.scrollTo(0,0); }
+function btn(label='Continue', enabled=true){
+  return new Promise(res=>{
+    const b=document.createElement('button'); b.className='primary'; b.textContent=label; b.disabled=!enabled;
+    b.onclick=()=>res(); app.querySelector('.card').appendChild(b);
+  });
+}
+function blocks(items, nb){
+  const out=[]; let last=null;
+  for(let b=0;b<nb;b++){ let s; do{ s=shuffle(items); }while(last!==null && s[0]===last && items.length>1); out.push(s); last=s[s.length-1]; }
+  return out;
+}
+function alphaBadge(letter){ return '<span class="alpha-badge'+(letter==='B'?' b':'')+'">'+'Alphabet '+letter+'</span>'; }
+
+/* =====================  AUDIO  ===================== */
+let fallbackUsed = false;
+function speak(txt){
+  return new Promise(res=>{
+    if(!('speechSynthesis' in window)){ res(); return; }
+    const u=new SpeechSynthesisUtterance(txt); u.rate=.7; u.lang='en-US';
+    let d=false; const f=()=>{ if(!d){d=true;res();} };
+    u.onend=f; u.onerror=f; setTimeout(f,4000);
+    speechSynthesis.speak(u);
+  });
+}
+function playClip(path, fb){
+  return new Promise(res=>{
+    const a=new Audio(CONFIG.audioBase+path); let d=false;
+    const fall=()=>{ if(d)return; d=true; fallbackUsed=true; speak(fb).then(res); };
+    a.onerror=fall; a.onended=()=>{ if(!d){d=true;res();} };
+    a.play().catch(fall);
+  });
+}
+const playPhoneme = p => playClip('phonemes/'+p+'.mp3', PH_TXT[p]);
+const playWordOnly = w => playClip('words/'+w+'.mp3', respell(w));
+async function playWord(w){
+  for(const c of w){ await playPhoneme(c); await sleep(250); }
+  await sleep(350);
+  await playWordOnly(w);
+}
+
+/* microphone + recording */
+let stream = null;
+function startRec(label){
+  if(!stream || !window.MediaRecorder) return null;
+  const chunks=[]; const r=new MediaRecorder(stream);
+  r.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  r.start(); return {r, chunks, label};
+}
+function stopRec(h){
+  return new Promise(res=>{
+    if(!h){res();return;}
+    h.r.onstop=()=>{ S.audio.push({label:h.label, blob:new Blob(h.chunks,{type:h.r.mimeType||'audio/webm'})}); res(); };
+    h.r.stop();
+  });
+}
+
+/* =====================  TRIAL ENGINE  ===================== */
+function runTrial({kind, target, grid, audio, min, max, cond, label, progress}){
+  return new Promise(resolve=>{
+    const n=target.length, slots=Array(n).fill(null), ev=[], t0=now();
+    let minDone=false, respDone=false, finished=false;
+    const tgt='<div class="target">'+target.map(s=>'<span class="sym">'+s+'</span>').join('')+'</div>';
+    const prompt = kind==='ls'
+      ? 'Repeat the sound aloud <b>once</b>.'
+      : 'Repeat the full pronunciation aloud <b>once</b>, blending the sounds.';
+    let body;
+    if(cond==='hand'){
+      body = '<p class="inst">'+prompt+' Then copy the '+(kind==='ls'?'symbol':'whole word')+' <b>once</b> on your paper and click Next.</p>'+
+             '<div style="text-align:center"><button id="next" class="primary">Next</button></div>';
+    } else if(kind==='ls'){
+      body = '<p class="inst">'+prompt+' Then click the matching symbol below.</p>'+
+             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>';
+    } else {
+      body = '<p class="inst">'+prompt+' Then rebuild the word by clicking the symbols in order. Click a filled box to remove that symbol.</p>'+
+             '<div class="slots" id="slots"></div>'+
+             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>';
+    }
+    page('<div class="progress">'+(progress||'')+'</div>'+tgt+body);
+
+    const finish=st=>{
+      if(finished)return; finished=true; clearTimeout(tMin); clearTimeout(tMax);
+      resolve({kind, label, cond, target:target.join(''), status:st, durationMs:Math.round(now()-t0), events:ev});
+    };
+    const tMin=setTimeout(()=>{ minDone=true; if(respDone) finish('complete'); }, T(min));
+    const tMax=setTimeout(()=>finish(respDone?'complete':'timeout'), T(max));
+    const done=()=>{ respDone=true; if(minDone) finish('complete'); };
+    Promise.resolve(audio()).catch(()=>{});
+
+    if(cond==='hand'){
+      const nb=document.getElementById('next');
+      nb.onclick=()=>{ ev.push({t:Math.round(now()-t0),action:'next'}); nb.disabled=true; done(); };
+    } else if(kind==='ls'){
+      const gr=document.getElementById('grid');
+      gr.onclick=e=>{
+        const b=e.target.closest('button'); if(!b||respDone)return;
+        const s=b.dataset.s, ok=(s===target[0]);
+        ev.push({t:Math.round(now()-t0),sym:s,correct:ok});
+        if(ok){ b.classList.add('ok'); gr.querySelectorAll('button').forEach(x=>x.disabled=true); done(); }
+        else { b.classList.add('bad'); setTimeout(()=>b.classList.remove('bad'),350); }
+      };
+    } else {
+      const sl=document.getElementById('slots'), gr=document.getElementById('grid');
+      const render=()=>{ sl.innerHTML=slots.map((s,i)=>'<div class="slot'+(s?' full':'')+'" data-i="'+i+'">'+(s||'')+'</div>').join(''); };
+      render();
+      gr.onclick=e=>{
+        const b=e.target.closest('button'); if(!b||respDone)return;
+        const i=slots.indexOf(null); if(i<0)return;
+        slots[i]=b.dataset.s; ev.push({t:Math.round(now()-t0),action:'add',sym:b.dataset.s,slot:i}); render();
+        if(slots.every((x,k)=>x===target[k])){ gr.querySelectorAll('button').forEach(x=>x.disabled=true); done(); }
+      };
+      sl.onclick=e=>{
+        const d=e.target.closest('.slot'); if(!d||respDone)return;
+        const i=+d.dataset.i; if(slots[i]){ ev.push({t:Math.round(now()-t0),action:'remove',slot:i}); slots[i]=null; render(); }
+      };
+    }
+  });
+}
+
+/* =====================  MATCHING TASK  ===================== */
+function matchTask({words, title, intro, submitLabel}){
+  return new Promise(resolve=>{
+    const ws=shuffle(words), rs=shuffle(words);
+    const wl={}, rl={};
+    ws.forEach((w,i)=>wl[w.id]=String.fromCharCode(65+i));
+    rs.forEach((w,i)=>rl[w.id]=i+1);
+    const pairs=new Set(), ev=[], plays={}; let sel=null; const t0=now();
+    page('<h2>'+title+'</h2><p>'+intro+'</p><div class="cols"><div><b>Written words</b><div id="wl"></div></div><div><b>Recordings</b><div id="rl"></div></div></div>');
+    const wlEl=document.getElementById('wl'), rlEl=document.getElementById('rl');
+    wlEl.innerHTML=ws.map(w=>'<div class="wcard" data-w="'+w.id+'"><b>'+wl[w.id]+'</b><span class="wtxt'+(w.plain?' plain':'')+'">'+w.disp+'</span><span class="cnt"></span></div>').join('');
+    rlEl.innerHTML=rs.map(w=>'<div class="rrow" data-r="'+w.id+'"><button class="play">▶</button><span class="lbl">Recording '+rl[w.id]+'</span><button class="tog" disabled>Match</button><span class="badges"></span></div>').join('');
+    const byId={}; words.forEach(w=>byId[w.id]=w);
+    const update=()=>{
+      wlEl.querySelectorAll('.wcard').forEach(c=>{
+        const id=c.dataset.w; c.classList.toggle('sel',id===sel);
+        const k=[...pairs].filter(p=>p.startsWith(id+'|')).length; c.querySelector('.cnt').textContent=k?('✓ '+k):'';
+      });
+      rlEl.querySelectorAll('.rrow').forEach(r=>{
+        const id=r.dataset.r, tog=r.querySelector('.tog'), on=sel&&pairs.has(sel+'|'+id);
+        tog.disabled=!sel; tog.classList.toggle('on',!!on); tog.textContent=on?'✓ Matched':'Match';
+        r.querySelector('.badges').innerHTML=[...pairs].filter(p=>p.endsWith('|'+id)).map(p=>'<span>'+wl[p.split('|')[0]]+'</span>').join('');
+      });
+    };
+    wlEl.onclick=e=>{ const c=e.target.closest('.wcard'); if(!c)return; sel=c.dataset.w; ev.push({t:Math.round(now()-t0),action:'select-word',word:sel}); update(); };
+    rlEl.onclick=e=>{
+      const r=e.target.closest('.rrow'); if(!r)return; const id=r.dataset.r;
+      if(e.target.closest('.play')){ plays[id]=(plays[id]||0)+1; ev.push({t:Math.round(now()-t0),action:'play',rec:id}); byId[id].play(); }
+      else if(e.target.closest('.tog')&&sel){
+        const key=sel+'|'+id, on=!pairs.has(key); on?pairs.add(key):pairs.delete(key);
+        ev.push({t:Math.round(now()-t0),action:on?'match':'unmatch',word:sel,rec:id}); update();
+      }
+    };
+    update();
+    const sb=document.createElement('button'); sb.className='primary'; sb.textContent=submitLabel||'Submit';
+    sb.onclick=()=>{
+      const un=words.filter(w=>![...pairs].some(p=>p.startsWith(w.id+'|'))).length;
+      if(un&&!confirm(un+' written word(s) have no matching recording yet. Submit anyway?'))return;
+      resolve({pairs:[...pairs].map(p=>p.split('|')), events:ev, plays, durationMs:Math.round(now()-t0)});
+    };
+    app.querySelector('.card').appendChild(sb);
+  });
+}
+
+/* =====================  SESSION SCREENS  ===================== */
+async function setup(){
+  page('<h2>Alphabet Learning Study</h2>'+
+    '<p>Thank you for taking part. This session takes about <b>20 minutes</b> plus a few minutes of setup.</p>'+
+    '<p><b>Before you begin, please:</b></p><ul>'+
+    '<li>Get a <b>pen</b> and <b>one blank sheet of paper</b>.</li>'+
+    '<li>Use a <b>computer</b> with <b>headphones</b> and a <b>working microphone</b>.</li>'+
+    '<li>Be in a <b>quiet place</b>, close unrelated applications, and silence notifications.</li>'+
+    '<li>Complete the session <b>on your own</b>, without notes or outside help.</li></ul>'+
+    '<p class="mute">Participant code: '+S.pid+'</p>');
+  await btn('I am ready');
+}
+
+async function consent(){
+  page('<h2>Informed consent</h2>'+
+    '<p class="mute"><i>[Replace this paragraph with your IRB-approved consent text, contact information, and risks/benefits statement.]</i></p>'+
+    '<p>You will learn two small sets of new symbols and sounds, then complete short matching tests. '+
+    'Participation is voluntary and you may stop at any time. '+
+    'Your responses are stored under a participant code and kept separately from any contact information.</p>'+
+    '<label><input type="checkbox" class="c"> I agree to take part in this study.</label>'+
+    '<label><input type="checkbox" class="c"> I agree to have my <b>voice recorded</b> during the training portions.</label>'+
+    '<label><input type="checkbox" class="c"> I agree to take and upload a <b>photograph of my paper</b> at the end.</label>');
+  const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=true;
+  const cs=[...app.querySelectorAll('.c')];
+  cs.forEach(c=>c.onchange=()=>b.disabled=!cs.every(x=>x.checked));
+  app.querySelector('.card').appendChild(b);
+  await new Promise(r=>b.onclick=r);
+}
+
+async function micCheck(){
+  page('<h2>Audio and microphone check</h2>'+
+    '<p><b>1.</b> Click the button. You should hear a short tone.</p><button id="tone">Play sound</button>'+
+    '<label><input type="checkbox" id="heard"> I heard the sound clearly</label>'+
+    '<p><b>2.</b> Click "Enable microphone", allow access, and say a few words. The bar should move.</p>'+
+    '<button id="mic">Enable microphone</button><div class="meter"><div id="lvl"></div></div>'+
+    '<button id="rec" disabled>Record 3 seconds and play back</button>'+
+    '<label><input type="checkbox" id="heardme"> I heard my own voice in the playback</label><p id="msg" class="warn"></p>');
+  const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=!DEBUG;
+  app.querySelector('.card').appendChild(b);
+  const upd=()=>{ b.disabled=!DEBUG&&!(document.getElementById('heard').checked&&document.getElementById('heardme').checked&&stream); };
+  document.getElementById('heard').onchange=upd; document.getElementById('heardme').onchange=upd;
+  document.getElementById('tone').onclick=()=>{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),gn=ctx.createGain();
+    o.frequency.value=440; gn.gain.value=.15; o.connect(gn); gn.connect(ctx.destination); o.start(); setTimeout(()=>{o.stop();ctx.close();},700);
+  };
+  document.getElementById('mic').onclick=async()=>{
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const ctx=new(window.AudioContext||window.webkitAudioContext)(),an=ctx.createAnalyser();
+      ctx.createMediaStreamSource(stream).connect(an); const buf=new Uint8Array(an.fftSize);
+      const lv=document.getElementById('lvl');
+      (function loop(){ if(!document.body.contains(lv)){ctx.close();return;} an.getByteTimeDomainData(buf);
+        let m=0; for(const v of buf)m=Math.max(m,Math.abs(v-128)); lv.style.width=Math.min(100,m*1.6)+'%'; requestAnimationFrame(loop); })();
+      document.getElementById('rec').disabled=false; document.getElementById('msg').textContent=''; upd();
+    }catch(e){ document.getElementById('msg').textContent='Microphone access was blocked. Please allow it in your browser and try again.'; }
+  };
+  document.getElementById('rec').onclick=async()=>{
+    const r=document.getElementById('rec'); r.disabled=true; r.textContent='Recording…';
+    const h=startRec('mic-check'); await sleep(3000);
+    await new Promise(res=>{ h.r.onstop=res; h.r.stop(); });
+    const url=URL.createObjectURL(new Blob(h.chunks,{type:h.r.mimeType||'audio/webm'}));
+    r.textContent='Playing back…'; const a=new Audio(url); a.onended=()=>{ r.disabled=false; r.textContent='Record again'; }; a.play();
+  };
+  await new Promise(r=>b.onclick=r);
+}
+
+async function overview(){
+  page('<h2>The task</h2>'+
+    '<p>In this study you will <b>learn two new alphabets</b>. Each alphabet uses a completely different set of symbols, but both alphabets stand for the same six speech sounds.</p>'+
+    '<p>You will use <b>two different practice methods</b> — one per alphabet:</p><ul>'+
+    '<li>For one alphabet you will <b>copy symbols by hand</b> on your paper.</li>'+
+    '<li>For the other alphabet you will <b>click symbols on screen</b>.</li></ul>'+
+    '<p>You will learn both methods before training begins. After training each alphabet you will complete a short matching test. Please follow each instruction exactly and do not write extra copies or repeat sounds more than instructed.</p>');
+  await btn();
+}
+
+async function demoMethods(){
+  // Demo handwriting method
+  page('<h2>Response method 1 of 2: Handwriting</h2>'+
+    '<p>For one alphabet you will <b>copy each symbol or word by hand on your paper once</b>, then click Next to continue.</p>'+
+    '<p>Here is a short demonstration using practice shapes — not the real symbols.</p>');
+  await btn('Start demo');
+  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ls', progress:'Handwriting demo — 1 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:()=>speak('demo word'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ww', progress:'Handwriting demo — 2 of 2'}));
+
+  // Demo selection method
+  page('<h2>Response method 2 of 2: Symbol selection</h2>'+
+    '<p>For the other alphabet you will <b>click symbols on screen</b> — first clicking the matching symbol in a grid of six, then clicking symbols in order to build whole words.</p>'+
+    '<p>Here is a short demonstration using the same practice shapes.</p>');
+  await btn('Start demo');
+  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ls', progress:'Selection demo — 1 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:()=>speak('demo word'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ww', progress:'Selection demo — 2 of 2'}));
+
+  page('<h2>Both methods demonstrated</h2>'+
+    '<p>You are now ready to begin training. The screen will tell you which method to use at the start of each section.</p>');
+  await btn('Begin training');
+}
+
+async function lsTraining(alpha, A){
+  const methodDesc = A.cond==='hand'
+    ? 'copy the symbol <b>once</b> on your paper and click Next'
+    : 'click the matching symbol in the grid below';
+  page('<h2>'+alphaBadge(alpha)+' Symbols and sounds</h2>'+
+    '<p>You will see one symbol at a time and hear the sound it stands for <b>once</b>. '+
+    'There are 24 short trials. Each lasts at least 5 seconds — do not rush ahead.</p>'+
+    '<p>After hearing each sound, repeat it aloud <b>once</b>, then <b>'+methodDesc+'</b>.</p>');
+  await btn('Start');
+  const rec=startRec(alpha+'-letter-sound');
+  const bl=blocks(P,4); let k=0;
+  for(let b=0;b<4;b++) for(const p of bl[b]){
+    k++;
+    const r=await runTrial({kind:'ls', target:[A.g[p]], grid:A.grid, audio:()=>playPhoneme(p), min:5000, max:20000, cond:A.cond, label:'LS-'+alpha, progress:A.label+' — Trial '+k+' of 24'});
+    Object.assign(r,{alphabet:alpha, phoneme:p, block:b+1, trialNum:k, mappingVersion:A.mapVer});
+    S.trials[alpha].push(r);
+    page('<div class="fix">+</div>'); await sleep(T(350));
+  }
+  await stopRec(rec);
+}
+
+async function wwTraining(alpha, A){
+  const methodDesc = A.cond==='hand'
+    ? 'copy the word <b>once</b> on your paper and click Next'
+    : 'rebuild the word by clicking its four symbols in order';
+  page('<h2>'+alphaBadge(alpha)+' Whole words</h2>'+
+    '<p>Now the symbols are combined into four-symbol words. For each word you will hear the sounds one by one, then the whole word. '+
+    'Repeat the whole word aloud <b>once</b>, blending the sounds, then <b>'+methodDesc+'</b>.</p>'+
+    '<p>There are 6 trials. Each lasts at least 8 seconds.</p>');
+  await btn('Start');
+  const rec=startRec(alpha+'-whole-word');
+  const bl=[shuffle(A.ww)]; let k=0;
+  for(let b=0;b<1;b++) for(const w of bl[b]){
+    k++;
+    const r=await runTrial({kind:'ww', target:A.toGlyphs(w), grid:A.grid, audio:()=>playWord(w), min:8000, max:15000, cond:A.cond, label:'WW-'+alpha, progress:A.label+' — Trial '+k+' of 6'});
+    Object.assign(r,{alphabet:alpha, word:w, block:b+1, trialNum:k, mappingVersion:A.mapVer});
+    S.trials[alpha].push(r);
+    page('<div class="fix">+</div>'); await sleep(T(350));
+  }
+  await stopRec(rec);
+}
+
+async function coverPaper(alpha){
+  page('<h2>'+alphaBadge(alpha)+' Training complete</h2>'+
+    '<p>Please <b>cover your paper</b> (face down or under something) so that no symbols or notes are visible during the test.</p>'+
+    '<label><input type="checkbox" id="cv"> My paper is covered and no notes or symbol–sound keys are visible.</label>');
+  const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=true;
+  document.getElementById('cv').onchange=e=>b.disabled=!e.target.checked;
+  app.querySelector('.card').appendChild(b); await new Promise(r=>b.onclick=r);
+}
+
+async function testPhase(alpha, A, isFirst){
+  // Use different English practice words the second time to reduce exact repetition.
+  const pracWords = isFirst
+    ? ['red','blue','green']
+    : ['cat','dog','hat'];
+
+  page('<h2>'+alphaBadge(alpha)+' Matching test</h2><ul>'+
+    '<li>Each written word uses '+A.label+' symbols you just learned.</li>'+
+    '<li>Click a written word to select it, then use ▶ to listen to recordings and press <b>Match</b> next to the matching recording(s).</li>'+
+    '<li>A written word may match <b>one or more</b> recordings — select <b>all</b> that match.</li>'+
+    '<li>Recordings stay available after matching.</li>'+
+    '<li>Work <b>as quickly and accurately as you can</b>, then click Submit. No accuracy feedback will be given.</li></ul>'+
+    '<p>'+(isFirst?'First':'As before,')+', a short practice round with ordinary English words.</p>');
+  await btn('Start practice');
+
+  const pw=pracWords.map(x=>({id:x, disp:x, plain:true, play:()=>speak(x)}));
+  S.practice.push({label:'practice-match-'+alpha, ...await matchTask({title:'Practice', intro:'Match each written word to its recording.', words:pw, submitLabel:'Submit practice'})});
+
+  page('<h2>Practice complete</h2><p>The real test has <b>20 '+A.label+' words</b> and 20 recordings.</p>');
+  await btn('Start test');
+
+  const items=[...A.tu.map(w=>({w,type:'untrained'})), ...A.tp.map(w=>({w,type:'practiced'}))];
+  const words=items.map(it=>({id:it.w, disp:A.toGlyphs(it.w).join(''), play:()=>playWordOnly(it.w)}));
+  const res=await matchTask({title:A.label+' matching test', intro:'Select a word, then match it to its recording(s). Click Submit when done.', words, submitLabel:'Submit'});
+
+  const per=items.map(it=>{
+    const sel=res.pairs.filter(p=>p[0]===it.w).map(p=>p[1]);
+    return {word:it.w, type:it.type, selectedRecordings:sel, correct:(sel.length===1&&sel[0]===it.w)};
+  });
+  const acc=t=>{ const a=per.filter(x=>x.type===t); return +(100*a.filter(x=>x.correct).length/a.length).toFixed(1); };
+  S.test[alpha]={...res, perItem:per, pctCorrectUntrained:acc('untrained'), pctCorrectPracticed:acc('practiced')};
+}
+
+async function adherence(){
+  page('<h2>Almost done</h2>'+
+    '<p><b>1. Photograph of your paper.</b> Take a photo of your paper and upload it. It should show symbols copied during the handwriting portion of training.</p>'+
+    '<input type="file" id="ph" accept="image/*" capture="environment">'+
+    '<p><b>2. A few quick questions</b> (please answer honestly; there are no penalties).</p>'+
+    '<label>Were you interrupted during the session? <select id="q1"><option value="">choose…</option><option>No</option><option>Yes</option></select></label>'+
+    '<label>Did you have any technical problems? <select id="q2"><option value="">choose…</option><option>No</option><option>Yes</option></select></label>'+
+    '<label>Did you use notes or get help from anyone/anything? <select id="q3"><option value="">choose…</option><option>No</option><option>Yes</option></select></label>'+
+    '<label>Did you do anything differently from the instructions? <select id="q4"><option value="">choose…</option><option>No</option><option>Yes</option></select></label>'+
+    '<label>If you answered "Yes" to any question, please explain:<br><textarea id="q5" rows="3" style="width:100%"></textarea></label><p id="err" class="warn"></p>');
+  const b=document.createElement('button'); b.className='primary'; b.textContent='Submit'; app.querySelector('.card').appendChild(b);
+  await new Promise(res=>b.onclick=()=>{
+    const v=i=>document.getElementById(i).value, f=document.getElementById('ph').files[0];
+    if(!DEBUG&&(!f||!v('q1')||!v('q2')||!v('q3')||!v('q4'))){ document.getElementById('err').textContent='Please upload a photo and answer all four questions.'; return; }
+    S.photo=f||null; S.adherence={interrupted:v('q1'),technicalProblems:v('q2'),outsideHelp:v('q3'),deviations:v('q4'),explanation:v('q5')}; res();
+  });
+}
+
+async function debrief(){
+  page('<h2>Debriefing</h2>'+
+    '<p>Thank you! This study compares two ways of learning new alphabets: <b>writing symbols by hand</b> versus <b>selecting symbols on a screen</b>. '+
+    'Unlike some studies that compare these methods between different groups of people, here every participant used both methods — one per alphabet. '+
+    'The order of alphabets and which method was paired with which alphabet varied across participants to rule out order and difficulty effects. '+
+    'We could not describe this comparison beforehand because it might have changed how you approached the task.</p>'+
+    '<p>The tests mostly used symbol combinations you had not practiced, to check whether you learned individual symbol–sound links. '+
+    'Your photograph and recordings are used only as adherence checks and are stored separately from your contact information.</p>'+
+    '<p class="mute">[Add researcher contact information here.]</p>');
+  await btn('Finish');
+}
+
+function buildData(){
+  return {
+    participantId: S.pid,
+    design: 'within-subjects',
+    version: S.version,
+    alphaOrder: S.alphaOrder,
+    condA: S.condA,
+    condB: S.condB,
+    mapVerA: S.mapVerA,
+    mapVerB: S.mapVerB,
+    glyphMapA: S.glyphMapA,
+    glyphMapB: S.glyphMapB,
+    startedAt: S.startedAt,
+    finishedAt: new Date().toISOString(),
+    debugMode: DEBUG,
+    userAgent: navigator.userAgent,
+    spokenFallbackUsed: fallbackUsed,
+    trials: S.trials,
+    practice: S.practice,
+    test: S.test,
+    adherence: S.adherence
+  };
+}
+
+async function finish(){
+  const data=buildData(), json=JSON.stringify(data,null,2);
+  try{ localStorage.setItem('alphabet_study_'+S.pid, json); }catch(e){}
+  page('<h2>All done — thank you!</h2><p>Your responses are saved in this browser.</p>'+
+    '<p class="mute">Researcher export: download the files below.</p><div id="dl"></div>');
+  const dl=document.getElementById('dl');
+  const add=(blob,name)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.textContent='Download '+name; a.style.display='block'; a.style.margin='6px 0'; dl.appendChild(a); };
+  add(new Blob([json],{type:'application/json'}), S.pid+'_data.json');
+  S.audio.forEach(a=>add(a.blob, S.pid+'_'+a.label+'.webm'));
+  if(S.photo) add(S.photo, S.pid+'_paper_'+S.photo.name);
+  window.__studyData=data;
+}
+
+/* =====================  RUN  ===================== */
+(async function main(){
+  try{
+    await setup();
+    await consent();
+    await micCheck();
+    await overview();
+    await demoMethods();   // demos BOTH methods before any training begins
+
+    for(let pass=0; pass<2; pass++){
+      const alpha=alphaOrder[pass];
+      const A=getAlphaConfig(alpha);
+
+      if(pass===1){
+        // Transition between alphabets — remind participant they can uncover paper
+        const nextCond=A.cond;
+        page('<h2>First alphabet complete — well done!</h2>'+
+          '<p>You will now learn the second alphabet using the <b>'+(nextCond==='hand'?'handwriting':'symbol-selection')+'</b> method.</p>'+
+          '<p>You may <b>uncover your paper</b> now.'+(nextCond==='hand'?' Use the same sheet to copy the new alphabet\'s symbols.':' You do not need to write anything for this alphabet — your paper can remain face-up.')+'</p>');
+        await btn('Continue to second alphabet');
+      }
+
+      await lsTraining(alpha, A);
+      await wwTraining(alpha, A);
+      await coverPaper(alpha);
+      await testPhase(alpha, A, pass===0);
+    }
+
+    await adherence();
+    await debrief();
+    await finish();
+  }catch(e){
+    page('<h2>Something went wrong</h2><p class="warn">'+e.message+'</p><p>Please contact the researcher.</p>');
+    console.error(e);
+  }
+})();
+
+})();
+</script>
+</body>
+</html>
