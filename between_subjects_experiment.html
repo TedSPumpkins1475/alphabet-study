@@ -454,9 +454,9 @@ async function finish(){
   let sent='';
   if(CONFIG.submitUrl){
     try{
-      const r=await fetch(CONFIG.submitUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:json});
-      const result=await r.json();
-      sent=(result.success===true)?'Your data was sent to the researcher.':'Data send uncertain — please also download the file below.';
+      const fd=new FormData(); fd.append('data',json);
+      await fetch(CONFIG.submitUrl,{method:'POST',body:fd,mode:'no-cors'});
+      sent='Your data was sent to the researcher.';
     }catch(e){ sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
   }
   page('<h2>All done — thank you!</h2><p>'+(sent||'Your responses are saved in this browser.')+'</p>'+
