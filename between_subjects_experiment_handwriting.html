@@ -54,6 +54,7 @@ const T = ms => DEBUG ? Math.max(300, ms/10) : ms;
 const CONFIG = {
   audioBase: 'audio/',
   submitUrl: 'https://script.google.com/macros/s/AKfycbzp96TC7DrhjKKNBpIwZK0bcPYYVb6q9LwHksUFnWlI5a-WY6OtYNxTey5KT3uEH1sjvQ/exec',
+  proxyUrl: '',  // set to Netlify function URL once deployed
   airtable: {
     token: 'pat1XBEpCxNJLFwUl.ad8f529fdda70a4f3c2b27faf093f86df9741890cbf57c7a91c9a1376bb117cc',
     baseId: 'appp2Z3Vbm1tOg2tT'
@@ -411,16 +412,8 @@ function buildData(){
   };
 }
 async function sendToAirtable(data){
-  const {token, baseId} = CONFIG.airtable;
-  const headers = {'Authorization':'Bearer '+token,'Content-Type':'application/json'};
-  const post = async (table, records) => {
-    for(let i=0; i<records.length; i+=10){
-      await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`,
-        {method:'POST', headers, body:JSON.stringify({records:records.slice(i,i+10)})});
-    }
-  };
   const ts = data.finishedAt;
-  const summaryRows = [{fields:{
+  const summaryRecords = [{fields:{
     ParticipantID: data.participantId,
     ExperimentType: data.design,
     Condition: data.condition||'',
@@ -431,7 +424,7 @@ async function sendToAirtable(data){
     AdherenceFlag: data.adherence ? [data.adherence.interrupted,data.adherence.outsideHelp,data.adherence.deviations].filter(Boolean).join('; ') : '',
     Timestamp: ts
   }}];
-  const perItemRows = (data.test?.perItem||[]).map(it=>({fields:{
+  const perItemRecords = (data.test?.perItem||[]).map(it=>({fields:{
     ParticipantID: data.participantId,
     Word: it.word,
     RT_ms: null,
@@ -439,8 +432,21 @@ async function sendToAirtable(data){
     ItemSet: it.type||'',
     Timestamp: ts
   }}));
-  await post('Summary', summaryRows);
-  if(perItemRows.length) await post('PerItem', perItemRows);
+
+  if(CONFIG.proxyUrl){
+    await fetch(CONFIG.proxyUrl, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({summaryRecords, perItemRecords})});
+  } else {
+    const {token, baseId} = CONFIG.airtable;
+    const headers = {'Authorization':'Bearer '+token,'Content-Type':'application/json'};
+    const post = async (table, records) => {
+      for(let i=0; i<records.length; i+=10)
+        await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`,
+          {method:'POST', headers, body:JSON.stringify({records:records.slice(i,i+10)})});
+    };
+    await post('Summary', summaryRecords);
+    if(perItemRecords.length) await post('PerItem', perItemRecords);
+  }
 }
 
 async function finish(){
