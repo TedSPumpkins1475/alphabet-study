@@ -148,8 +148,8 @@ function playClip(path,fb){
     a.play().catch(fall);
   });
 }
-const playPhoneme = p => playClip('phonemes/'+p+'.mp3', PH_TXT[p]);
-const playWordOnly = w => playClip('words/'+w+'.mp3', respell(w));
+const playPhoneme = p => playClip('phonemes/'+p+'.m4a', PH_TXT[p]);
+const playWordOnly = w => playClip('words/'+w+'.m4a', respell(w));
 async function playWord(w){              // phonemes one by one, then the whole word
   for(const c of w){ await playPhoneme(c); await sleep(250); }
   await sleep(350);
