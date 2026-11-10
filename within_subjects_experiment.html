@@ -62,8 +62,12 @@ const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
 const T = ms => DEBUG ? Math.max(300, ms/10) : ms;
 const CONFIG = {
-  audioBase: 'audio/',   // audio/phonemes/{m,n,p,t,a,i}.mp3  audio/words/{word}.mp3
-  submitUrl: 'https://script.google.com/macros/s/AKfycbzp96TC7DrhjKKNBpIwZK0bcPYYVb6q9LwHksUFnWlI5a-WY6OtYNxTey5KT3uEH1sjvQ/exec'
+  audioBase: 'audio/',
+  submitUrl: 'https://script.google.com/macros/s/AKfycbzp96TC7DrhjKKNBpIwZK0bcPYYVb6q9LwHksUFnWlI5a-WY6OtYNxTey5KT3uEH1sjvQ/exec',
+  airtable: {
+    token: 'pat1XBEpCxNJLFwUl.ad8f529fdda70a4f3c2b27faf093f86df9741890cbf57c7a91c9a1376bb117cc',
+    baseId: 'appp2Z3Vbm1tOg2tT'
+  }
 };
 
 /* =====================  STIMULI  ===================== */
@@ -568,6 +572,40 @@ function buildData(){
   };
 }
 
+async function sendToAirtable(data){
+  const {token, baseId} = CONFIG.airtable;
+  const headers = {'Authorization':'Bearer '+token,'Content-Type':'application/json'};
+  const post = async (table, records) => {
+    for(let i=0; i<records.length; i+=10){
+      await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`,
+        {method:'POST', headers, body:JSON.stringify({records:records.slice(i,i+10)})});
+    }
+  };
+  const ts = data.finishedAt;
+  const alphas = ['A','B'];
+  const summaryRows = alphas.map(k=>({fields:{
+    ParticipantID: data.participantId,
+    ExperimentType: data.design+'-'+k,
+    Condition: data['cond'+k]||'',
+    AlphaOrder: data.alphaOrder||'',
+    MeanRT: data.test[k] ? Math.round(data.test[k].durationMs/1000) : null,
+    AccuracyUntrained: data.test[k] ? data.test[k].pctCorrectUntrained : null,
+    AccuracyPracticed: data.test[k] ? data.test[k].pctCorrectPracticed : null,
+    AdherenceFlag: data.adherence ? [data.adherence.interrupted,data.adherence.outsideHelp,data.adherence.deviations].filter(Boolean).join('; ') : '',
+    Timestamp: ts
+  }}));
+  const perItemRows = alphas.flatMap(k=>(data.test[k]?.perItem||[]).map(it=>({fields:{
+    ParticipantID: data.participantId,
+    Word: it.word,
+    RT_ms: null,
+    Correct: !!it.correct,
+    ItemSet: it.type||'',
+    Timestamp: ts
+  }})));
+  await post('Summary', summaryRows);
+  if(perItemRows.length) await post('PerItem', perItemRows);
+}
+
 async function finish(){
   const data=buildData(), json=JSON.stringify(data,null,2);
   try{ localStorage.setItem('alphabet_study_'+S.pid, json); }catch(e){}
@@ -577,8 +615,10 @@ async function finish(){
       const url=CONFIG.submitUrl+'?data='+encodeURIComponent(json);
       await fetch(url,{method:'GET',mode:'no-cors'});
       sent='Your data was sent to the researcher.';
-    }catch(e){ sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
+    }catch(e){ sent=''; }
   }
+  try{ await sendToAirtable(data); sent='Your data was sent to the researcher.'; }
+  catch(e){ if(!sent) sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
   page('<h2>All done — thank you!</h2><p>'+(sent||'Your responses are saved in this browser.')+'</p>'+
     '<p class="mute">Researcher export: download the file below.</p><div id="dl"></div>');
   const dl=document.getElementById('dl');
