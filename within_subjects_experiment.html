@@ -64,11 +64,7 @@ const T = ms => DEBUG ? Math.max(300, ms/10) : ms;
 const CONFIG = {
   audioBase: 'audio/',
   submitUrl: 'https://script.google.com/macros/s/AKfycbzp96TC7DrhjKKNBpIwZK0bcPYYVb6q9LwHksUFnWlI5a-WY6OtYNxTey5KT3uEH1sjvQ/exec',
-  proxyUrl: '',  // set to Netlify function URL once deployed
-  airtable: {
-    token: 'pat1XBEpCxNJLFwUl.ad8f529fdda70a4f3c2b27faf093f86df9741890cbf57c7a91c9a1376bb117cc',
-    baseId: 'appp2Z3Vbm1tOg2tT'
-  }
+  proxyUrl: 'https://singular-phoenix-10443e.netlify.app/.netlify/functions/submit'
 };
 
 /* =====================  STIMULI  ===================== */
@@ -596,20 +592,8 @@ async function sendToAirtable(data){
     Timestamp: ts
   }})));
 
-  if(CONFIG.proxyUrl){
-    await fetch(CONFIG.proxyUrl, {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({summaryRecords, perItemRecords})});
-  } else {
-    const {token, baseId} = CONFIG.airtable;
-    const headers = {'Authorization':'Bearer '+token,'Content-Type':'application/json'};
-    const post = async (table, records) => {
-      for(let i=0; i<records.length; i+=10)
-        await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`,
-          {method:'POST', headers, body:JSON.stringify({records:records.slice(i,i+10)})});
-    };
-    await post('Summary', summaryRecords);
-    if(perItemRecords.length) await post('PerItem', perItemRecords);
-  }
+  await fetch(CONFIG.proxyUrl, {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({summaryRecords, perItemRecords})});
 }
 
 async function finish(){
