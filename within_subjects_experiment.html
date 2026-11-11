@@ -242,11 +242,13 @@ function runTrial({kind, target, grid, audio, min, max, cond, label, progress}){
              '<div style="text-align:center"><button id="next" class="primary">Next</button></div>';
     } else if(kind==='ls'){
       body = '<p class="inst">'+prompt+' Then click the matching symbol below.</p>'+
-             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>';
+             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>'+
+             '<p id="sel-fb" style="color:#c0392b;font-weight:bold;min-height:1.5em;text-align:center;margin-top:8px"></p>';
     } else {
       body = '<p class="inst">'+prompt+' Then rebuild the word by clicking the symbols in order. Click a filled box to remove that symbol.</p>'+
              '<div class="slots" id="slots"></div>'+
-             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>';
+             '<div class="grid" id="grid">'+grid.map(s=>'<button data-s="'+s+'">'+s+'</button>').join('')+'</div>'+
+             '<p id="sel-fb" style="color:#c0392b;font-weight:bold;min-height:1.5em;text-align:center;margin-top:8px"></p>';
     }
     page('<div class="progress">'+(progress||'')+'</div>'+tgt+body);
 
@@ -268,8 +270,8 @@ function runTrial({kind, target, grid, audio, min, max, cond, label, progress}){
         const b=e.target.closest('button'); if(!b||respDone)return;
         const s=b.dataset.s, ok=(s===target[0]);
         ev.push({t:Math.round(now()-t0),sym:s,correct:ok});
-        if(ok){ b.classList.add('ok'); gr.querySelectorAll('button').forEach(x=>x.disabled=true); done(); }
-        else { b.classList.add('bad'); setTimeout(()=>b.classList.remove('bad'),350); }
+        if(ok){ b.classList.add('ok'); gr.querySelectorAll('button').forEach(x=>x.disabled=true); document.getElementById('sel-fb').textContent=''; done(); }
+        else { b.classList.add('bad'); setTimeout(()=>b.classList.remove('bad'),350); document.getElementById('sel-fb').textContent='✗ Incorrect — try again.'; }
       };
     } else {
       const sl=document.getElementById('slots'), gr=document.getElementById('grid');
@@ -279,7 +281,10 @@ function runTrial({kind, target, grid, audio, min, max, cond, label, progress}){
         const b=e.target.closest('button'); if(!b||respDone)return;
         const i=slots.indexOf(null); if(i<0)return;
         slots[i]=b.dataset.s; ev.push({t:Math.round(now()-t0),action:'add',sym:b.dataset.s,slot:i}); render();
-        if(slots.every((x,k)=>x===target[k])){ gr.querySelectorAll('button').forEach(x=>x.disabled=true); done(); }
+        const fb=document.getElementById('sel-fb');
+        if(slots.every((x,k)=>x===target[k])){ gr.querySelectorAll('button').forEach(x=>x.disabled=true); fb.textContent=''; done(); }
+        else if(slots.indexOf(null)<0){ fb.textContent='✗ Not quite — remove a symbol and try again.'; ev.push({t:Math.round(now()-t0),action:'word-wrong'}); }
+        else { fb.textContent=''; }
       };
       sl.onclick=e=>{
         const d=e.target.closest('.slot'); if(!d||respDone)return;
@@ -493,7 +498,8 @@ async function testPhase(alpha, A, isFirst){
     '<li>Click a written word to select it, then use ▶ to listen to recordings and press <b>Match</b> next to the matching recording(s).</li>'+
     '<li>A written word may match <b>one or more</b> recordings — select <b>all</b> that match.</li>'+
     '<li>Recordings stay available after matching.</li>'+
-    '<li>Work <b>as quickly and accurately as you can</b>, then click Submit. No accuracy feedback will be given.</li></ul>'+
+    '<li><b>Work as fast and as accurately as possible</b> — your completion time is recorded.</li>'+
+    '<li>Click Submit when finished. No accuracy feedback will be given.</li></ul>'+
     '<p>'+(isFirst?'First':'As before,')+', a short practice round with ordinary English words.</p>');
   await btn('Start practice');
 
@@ -546,6 +552,10 @@ async function debrief(){
 }
 
 function buildData(){
+  const allTrials=[...(S.trials.A||[]),...(S.trials.B||[])];
+  const selT=allTrials.filter(t=>t.cond==='select');
+  const selectionErrors=selT.reduce((n,t)=>n+(t.events||[]).filter(e=>e.correct===false).length,0);
+  const selectionTimeouts=selT.filter(t=>t.status==='timeout').length;
   return {
     participantId: S.pid,
     design: 'within-subjects',
@@ -565,7 +575,9 @@ function buildData(){
     trials: S.trials,
     practice: S.practice,
     test: S.test,
-    adherence: S.adherence
+    adherence: S.adherence,
+    selectionErrors,
+    selectionTimeouts
   };
 }
 
@@ -581,6 +593,8 @@ async function sendToAirtable(data){
     AccuracyUntrained: data.test[k] ? data.test[k].pctCorrectUntrained : null,
     AccuracyPracticed: data.test[k] ? data.test[k].pctCorrectPracticed : null,
     AdherenceFlag: data.adherence ? [data.adherence.interrupted,data.adherence.outsideHelp,data.adherence.deviations].filter(Boolean).join('; ') : '',
+    SelectionErrors: data.selectionErrors||0,
+    SelectionTimeouts: data.selectionTimeouts||0,
     Timestamp: ts
   }}));
   const perItemRecords = alphas.flatMap(k=>(data.test[k]?.perItem||[]).map(it=>({fields:{

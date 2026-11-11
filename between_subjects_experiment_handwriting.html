@@ -356,7 +356,8 @@ async function testPhase(){
     '<li>Click a written word to select it, then use ▶ to listen to recordings and press <b>Match</b> next to the recording(s) that match it.</li>'+
     '<li>A written word may match <b>one or more</b> recordings. Select every recording that matches.</li>'+
     '<li>Recordings stay available after matching, and you can play them as often as you like.</li>'+
-    '<li>Work <b>as quickly and accurately as you can</b>, then click Submit. You will not receive feedback on accuracy.</li></ul>'+
+    '<li><b>Work as fast and as accurately as possible</b> — your completion time is recorded.</li>'+
+    '<li>Click Submit when finished. You will not receive feedback on accuracy.</li></ul>'+
     '<p>First, a short practice round with ordinary English words.</p>');
   await btn('Start practice');
   const pw=['red','blue','green'].map(x=>({id:x,disp:x,plain:true,play:()=>speak(x)}));
@@ -404,7 +405,8 @@ function buildData(){
   return {
     participantId:S.pid, design:'between-subjects', condition:S.cond, mappingVersion:S.mapVer, glyphMap:g,
     startedAt:S.startedAt, finishedAt:new Date().toISOString(), debugMode:DEBUG, userAgent:navigator.userAgent,
-    spokenFallbackUsed:fallbackUsed, trials:S.trials, practice:S.practice, test:S.test, adherence:S.adherence
+    spokenFallbackUsed:fallbackUsed, trials:S.trials, practice:S.practice, test:S.test, adherence:S.adherence,
+    selectionErrors:0, selectionTimeouts:0
   };
 }
 async function sendToAirtable(data){
@@ -418,6 +420,8 @@ async function sendToAirtable(data){
     AccuracyUntrained: data.test ? data.test.pctCorrectUntrained : null,
     AccuracyPracticed: data.test ? data.test.pctCorrectPracticed : null,
     AdherenceFlag: data.adherence ? [data.adherence.interrupted,data.adherence.outsideHelp,data.adherence.deviations].filter(Boolean).join('; ') : '',
+    SelectionErrors: 0,
+    SelectionTimeouts: 0,
     Timestamp: ts
   }}];
   const perItemRecords = (data.test?.perItem||[]).map(it=>({fields:{
