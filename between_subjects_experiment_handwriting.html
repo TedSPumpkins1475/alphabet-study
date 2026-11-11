@@ -468,7 +468,6 @@ async function finish(){
     await coverPaper(); await testPhase(); await adherence(); await debrief(); await finish();
   }catch(e){ page('<h2>Something went wrong</h2><p class="warn">'+e.message+'</p><p>Please contact the researcher.</p>'); console.error(e); }
 })();
-})();
 </script>
 </body>
 </html>
