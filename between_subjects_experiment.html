@@ -500,7 +500,6 @@ async function finish(){
   }
   try{ await sendToAirtable(data); sent='Your data was sent to the researcher.'; }
   catch(e){ if(!sent) sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
-  }
   page('<h2>All done — thank you!</h2><p>'+(sent||'Your responses are saved in this browser.')+'</p>'+
     '<p class="mute">Researcher export: download the file below.</p><div id="dl"></div>');
   const dl=document.getElementById('dl');
@@ -518,6 +517,7 @@ async function finish(){
     await demoMethod(); await lsTraining(); await wwTraining();
     await coverPaper(); await testPhase(); await adherence(); await debrief(); await finish();
   }catch(e){ page('<h2>Something went wrong</h2><p class="warn">'+e.message+'</p><p>Please contact the researcher.</p>'); console.error(e); }
+})();
 })();
 </script>
 </body>
