@@ -99,9 +99,118 @@ const S = {
   startedAt: new Date().toISOString(),
   trials: [], practice: [], test: null, adherence: null, audio: [], photo: null
 };
-const g = {};                                   // phoneme → glyph for this participant
+const g = {};
 P.forEach((p,j) => g[p] = GL[(j+S.mapVer)%6]);
 const toGlyphs = w => [...w].map(c => g[c]);
+
+/* =====================  DATA LAYER  ===================== */
+const _DL = {
+  sessionId: (()=>{ try{ return crypto.randomUUID(); }catch(e){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16);}); } })(),
+  appVersion: 'unknown',
+  sessionRecId: null,
+  blockRecId: null,
+  phases: {},
+  lastPhase: 'init',
+  tab: { count: 0, ms: 0, _t: null },
+  testTab: { count: 0, ms: 0, _t: null },
+  _inTest: false
+};
+
+document.addEventListener('visibilitychange', ()=>{
+  const hidden = document.hidden;
+  const now = performance.now();
+  [_DL.tab, ...((_DL._inTest)?[_DL.testTab]:[])].forEach(t=>{
+    if(hidden){ t._t=now; t.count++; }
+    else if(t._t!=null){ t.ms+=now-t._t; t._t=null; }
+  });
+});
+
+function _logPhase(name){ _DL.phases[name]=new Date().toISOString(); _DL.lastPhase=name; }
+
+async function _atCall(payload){
+  try{
+    const r=await fetch(CONFIG.proxyUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    return await r.json();
+  }catch(e){ console.warn('Airtable call failed:',e); return {}; }
+}
+async function _atCreate(table,fields){
+  const r=await _atCall({op:'create',table,records:[{fields}]});
+  return r.ids?.[0]||null;
+}
+async function _atPatch(table,id,fields){
+  if(!id) return;
+  await _atCall({op:'patch',table,updates:[{id,fields}]});
+}
+
+function _lsStats(trials){
+  const ls=trials.filter(t=>t.kind==='ls');
+  const sorted=[...ls].sort((a,b)=>a.durationMs-b.durationMs);
+  const med=sorted.length?sorted[Math.floor(sorted.length/2)].durationMs:null;
+  return {
+    ls_n_trials:ls.length,
+    ls_n_completed:ls.filter(t=>t.status==='complete').length,
+    ls_n_timed_out:ls.filter(t=>t.status==='timeout').length,
+    ls_total_exposure_ms:ls.reduce((s,t)=>s+t.durationMs,0),
+    ls_mean_duration_ms:ls.length?Math.round(ls.reduce((s,t)=>s+t.durationMs,0)/ls.length):null,
+    ls_median_duration_ms:med,
+    ls_first_click_pct:null, ls_first_click_pct_b1:null, ls_first_click_pct_b2:null,
+    ls_total_incorrect_clicks:0
+  };
+}
+
+function _wwStats(trials){
+  const ww=trials.filter(t=>t.kind==='ww');
+  return {
+    ww_n_trials:ww.length,
+    ww_n_completed:ww.filter(t=>t.status==='complete').length,
+    ww_n_timed_out:ww.filter(t=>t.status==='timeout').length,
+    ww_total_exposure_ms:ww.reduce((s,t)=>s+t.durationMs,0),
+    ww_mean_duration_ms:ww.length?Math.round(ww.reduce((s,t)=>s+t.durationMs,0)/ww.length):null,
+    ww_total_slot_corrections:0
+  };
+}
+
+function _testStats(test, testTab){
+  if(!test) return {};
+  const per=test.perItem||[], ev=test.events||[];
+  const unt=per.filter(x=>x.type==='untrained'), prc=per.filter(x=>x.type==='practiced');
+  const plays=ev.filter(e=>e.action==='play');
+  const played=new Set(plays.map(e=>e.rec));
+  const items=per.map(item=>({
+    item_id:item.word, item_type:item.type,
+    exact_correct:item.correct,
+    selected_recordings:item.selectedRecordings,
+    correct_recording_ids:[item.word],
+    hits:item.selectedRecordings.includes(item.word)?1:0,
+    false_alarms:item.selectedRecordings.filter(r=>r!==item.word).length,
+    misses:item.selectedRecordings.includes(item.word)?0:1,
+    n_selections:item.selectedRecordings.length,
+    n_plays:plays.filter(p=>p.rec===item.word).length
+  }));
+  return {
+    n_untrained_correct:unt.filter(x=>x.correct).length,
+    pct_untrained:unt.length?+(100*unt.filter(x=>x.correct).length/unt.length).toFixed(1):null,
+    n_practiced_correct:prc.filter(x=>x.correct).length,
+    pct_practiced:prc.length?+(100*prc.filter(x=>x.correct).length/prc.length).toFixed(1):null,
+    test_completion_ms:test.durationMs||null,
+    test_time_to_first_ms:ev.length?ev[0].t:null,
+    test_total_plays:plays.length,
+    test_unplayed_recordings:per.filter(x=>!played.has(x.word)).length,
+    n_items_blank:per.filter(x=>!x.selectedRecordings||x.selectedRecordings.length===0).length,
+    test_tab_hidden_count:testTab?testTab.count:0,
+    test_tab_hidden_ms:testTab?Math.round(testTab.ms):0,
+    test_items_json:JSON.stringify(items)
+  };
+}
+
+function _practiceStats(practiceEntry){
+  if(!practiceEntry) return {test_practice_accuracy:null,test_practice_duration_ms:null};
+  const per=practiceEntry.perItem||[];
+  return {
+    test_practice_accuracy:per.length?+(100*per.filter(x=>x.correct).length/per.length).toFixed(1):null,
+    test_practice_duration_ms:practiceEntry.durationMs||null
+  };
+}
 
 /* =====================  HELPERS  ===================== */
 const app = document.getElementById('app');
@@ -409,48 +518,31 @@ function buildData(){
     selectionErrors:0, selectionTimeouts:0
   };
 }
-async function sendToAirtable(data){
-  const ts = data.finishedAt;
-  const summaryRecords = [{fields:{
-    ParticipantID: data.participantId,
-    ExperimentType: data.design,
-    Condition: data.condition||'',
-    AlphaOrder: '',
-    MeanRT: data.test ? Math.round(data.test.durationMs/1000) : null,
-    AccuracyUntrained: data.test ? data.test.pctCorrectUntrained : null,
-    AccuracyPracticed: data.test ? data.test.pctCorrectPracticed : null,
-    AdherenceFlag: data.adherence ? [data.adherence.interrupted,data.adherence.outsideHelp,data.adherence.deviations].filter(Boolean).join('; ') : '',
-    SelectionErrors: 0,
-    SelectionTimeouts: 0,
-    Timestamp: ts
-  }}];
-  const perItemRecords = (data.test?.perItem||[]).map(it=>({fields:{
-    ParticipantID: data.participantId,
-    Word: it.word,
-    RT_ms: null,
-    Correct: !!it.correct,
-    ItemSet: it.type||'',
-    Timestamp: ts
-  }}));
-
-  await fetch(CONFIG.proxyUrl, {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({summaryRecords, perItemRecords})});
-}
-
 async function finish(){
   const data=buildData(), json=JSON.stringify(data,null,2);
   try{ localStorage.setItem('alphabet_study_'+S.pid,json); }catch(e){}
-  let sent='';
-  if(CONFIG.submitUrl){
-    try{
-      const url=CONFIG.submitUrl+'?data='+encodeURIComponent(json);
-      await fetch(url,{method:'GET',mode:'no-cors'});
-      sent='Your data was sent to the researcher.';
-    }catch(e){ sent=''; }
-  }
-  try{ await sendToAirtable(data); sent='Your data was sent to the researcher.'; }
-  catch(e){ if(!sent) sent='Automatic send failed. Please download the file below and send it to the researcher.'; }
-  page('<h2>All done — thank you!</h2><p>'+(sent||'Your responses are saved in this browser.')+'</p>'+
+  _logPhase('finish');
+
+  await _atPatch('ExpSessions', _DL.sessionRecId, {
+    status:'completed',
+    completed_at:new Date().toISOString(),
+    total_duration_s:Math.round((Date.now()-Date.parse(S.startedAt))/1000),
+    last_phase_completed:_DL.lastPhase,
+    phase_timestamps_json:JSON.stringify(_DL.phases),
+    tab_hidden_count:_DL.tab.count,
+    tab_hidden_ms:Math.round(_DL.tab.ms),
+    interruptions:S.adherence?.interrupted==='Yes',
+    technical_problems:S.adherence?.technicalProblems==='Yes',
+    outside_help:S.adherence?.outsideHelp==='Yes',
+    deviations:S.adherence?.deviations==='Yes',
+    adherence_notes:S.adherence?.explanation||'',
+    photo_uploaded:!!S.photo,
+    voice_recordings_n:S.audio?.length||0,
+    raw_json:json.slice(0,99000)
+  });
+  localStorage.setItem('alphabet_study_done','1');
+
+  page('<h2>All done — thank you!</h2><p>Your data was sent to the researcher.</p>'+
     '<p class="mute">Researcher export: download the file below.</p><div id="dl"></div>');
   const dl=document.getElementById('dl');
   const add=(blob,name)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.textContent='Download '+name; a.style.display='block'; a.style.margin='6px 0'; dl.appendChild(a); };
@@ -463,9 +555,83 @@ async function finish(){
 /* =====================  RUN  ===================== */
 (async function main(){
   try{
-    await setup(); await consent(); await micCheck(); await overview();
-    await demoMethod(); await lsTraining(); await wwTraining();
-    await coverPaper(); await testPhase(); await adherence(); await debrief(); await finish();
+    _DL.appVersion = sessionStorage.getItem('app_version') ||
+      await fetch('https://api.github.com/repos/TedSPumpkins1475/alphabet-study/commits/main',
+        {headers:{'Accept':'application/vnd.github.sha'}})
+        .then(r=>r.text()).then(s=>{ const v=s.trim().slice(0,7); sessionStorage.setItem('app_version',v); return v; })
+        .catch(()=>'unknown');
+
+    await setup(); _logPhase('setup');
+
+    _DL.sessionRecId = await _atCreate('ExpSessions', {
+      session_id:_DL.sessionId,
+      participant_code:S.pid,
+      external_id:Q.get('pid')||'',
+      design:'between-subjects',
+      condition:'handwriting',
+      is_test:DEBUG||Q.has('test'),
+      app_version:_DL.appVersion,
+      mapping_version:String(S.mapVer),
+      started_at:S.startedAt,
+      status:'in_progress',
+      user_agent:navigator.userAgent,
+      screen_wh:screen.width+'x'+screen.height,
+      window_wh:window.innerWidth+'x'+window.innerHeight,
+      is_mobile:/Mobi|Android/i.test(navigator.userAgent)||navigator.maxTouchPoints>1,
+      timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,
+      prior_completion_detected:!!localStorage.getItem('alphabet_study_done')
+    });
+
+    await consent(); _logPhase('consent');
+    await _atPatch('ExpSessions', _DL.sessionRecId, {
+      consent_participate:true, consent_voice:true, consent_photo:true,
+      consent_at:new Date().toISOString()
+    });
+
+    await micCheck(); _logPhase('mic_check');
+    await _atPatch('ExpSessions', _DL.sessionRecId, {
+      audio_check_passed:true, mic_check_passed:true, last_phase_completed:'mic_check'
+    });
+
+    await overview(); _logPhase('overview');
+    await demoMethod(); _logPhase('demo');
+
+    _DL.blockRecId = await _atCreate('ExpBlocks', {
+      session_id:_DL.sessionId,
+      participant_code:S.pid,
+      design:'between-subjects',
+      condition:'handwriting',
+      alphabet:'single',
+      order_position:1,
+      mapping_version:S.mapVer,
+      symbol_map_json:JSON.stringify(g),
+      grid_layout_json:JSON.stringify([])
+    });
+    _logPhase('training_start');
+
+    await lsTraining();
+    await wwTraining();
+    await coverPaper(); _logPhase('cover_paper');
+
+    _DL._inTest=true; _DL.testTab={count:0,ms:0,_t:null};
+    await testPhase(); _logPhase('test_complete');
+    _DL._inTest=false;
+
+    const practiceEntry=S.practice.filter(p=>p.label==='practice-match').slice(-1)[0];
+    await _atPatch('ExpBlocks', _DL.blockRecId, {
+      ..._lsStats(S.trials),
+      ..._wwStats(S.trials),
+      ..._practiceStats(practiceEntry),
+      ..._testStats(S.test, _DL.testTab),
+      letter_trials_json:JSON.stringify(S.trials.filter(t=>t.kind==='ls')),
+      word_trials_json:JSON.stringify(S.trials.filter(t=>t.kind==='ww')),
+      test_practice_json:JSON.stringify(practiceEntry||{}),
+      demo_json:JSON.stringify(S.practice.filter(p=>p.label?.startsWith('demo')))
+    });
+
+    await adherence(); _logPhase('adherence');
+    await debrief(); _logPhase('debrief');
+    await finish();
   }catch(e){ page('<h2>Something went wrong</h2><p class="warn">'+e.message+'</p><p>Please contact the researcher.</p>'); console.error(e); }
 })();
 })();
