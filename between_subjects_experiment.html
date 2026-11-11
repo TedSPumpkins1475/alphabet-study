@@ -384,7 +384,7 @@ async function wwTraining(){
   const rec=startRec('whole-word-training');
   const bl=[shuffle(WW_TRAIN)]; let k=0;
   for(let b=0;b<1;b++) for(const w of bl[b]){
-    k++; const r=await runTrial({kind:'ww',target:toGlyphs(w),grid:gridOrder,audio:()=>playWord(w),min:8000,max:15000,cond:S.cond,label:'WW',progress:'Trial '+k+' of 6'});
+    k++; const r=await runTrial({kind:'ww',target:toGlyphs(w),grid:gridOrder,audio:()=>playWord(w),min:8000,max:25000,cond:S.cond,label:'WW',progress:'Trial '+k+' of 6'});
     Object.assign(r,{word:w,block:b+1,trialNum:k,mappingVersion:S.mapVer}); S.trials.push(r);
     page('<div class="fix">+</div>'); await sleep(T(350));
   }

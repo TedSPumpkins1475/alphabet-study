@@ -442,14 +442,14 @@ async function lsTraining(alpha, A){
     : 'click the matching symbol in the grid below';
   page('<h2>'+alphaBadge(alpha)+' Symbols and sounds</h2>'+
     '<p>You will see one symbol at a time and hear the sound it stands for <b>once</b>. '+
-    'There are 24 short trials. Each lasts at least 5 seconds — do not rush ahead.</p>'+
+    'There are 12 short trials. Each lasts at least 5 seconds — do not rush ahead.</p>'+
     '<p>After hearing each sound, repeat it aloud <b>once</b>, then <b>'+methodDesc+'</b>.</p>');
   await btn('Start');
   const rec=startRec(alpha+'-letter-sound');
-  const bl=blocks(P,4); let k=0;
-  for(let b=0;b<4;b++) for(const p of bl[b]){
+  const bl=blocks(P,2); let k=0;
+  for(let b=0;b<2;b++) for(const p of bl[b]){
     k++;
-    const r=await runTrial({kind:'ls', target:[A.g[p]], grid:A.grid, audio:()=>playPhoneme(p), min:5000, max:20000, cond:A.cond, label:'LS-'+alpha, progress:A.label+' — Trial '+k+' of 24'});
+    const r=await runTrial({kind:'ls', target:[A.g[p]], grid:A.grid, audio:()=>playPhoneme(p), min:5000, max:20000, cond:A.cond, label:'LS-'+alpha, progress:A.label+' — Trial '+k+' of 12'});
     Object.assign(r,{alphabet:alpha, phoneme:p, block:b+1, trialNum:k, mappingVersion:A.mapVer});
     S.trials[alpha].push(r);
     page('<div class="fix">+</div>'); await sleep(T(350));
@@ -470,7 +470,7 @@ async function wwTraining(alpha, A){
   const bl=[shuffle(A.ww)]; let k=0;
   for(let b=0;b<1;b++) for(const w of bl[b]){
     k++;
-    const r=await runTrial({kind:'ww', target:A.toGlyphs(w), grid:A.grid, audio:()=>playWord(w), min:8000, max:15000, cond:A.cond, label:'WW-'+alpha, progress:A.label+' — Trial '+k+' of 6'});
+    const r=await runTrial({kind:'ww', target:A.toGlyphs(w), grid:A.grid, audio:()=>playWord(w), min:8000, max:25000, cond:A.cond, label:'WW-'+alpha, progress:A.label+' — Trial '+k+' of 6'});
     Object.assign(r,{alphabet:alpha, word:w, block:b+1, trialNum:k, mappingVersion:A.mapVer});
     S.trials[alpha].push(r);
     page('<div class="fix">+</div>'); await sleep(T(350));
