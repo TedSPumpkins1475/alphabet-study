@@ -489,7 +489,7 @@ async function demoMethod(){
     '<p>Here is a short demonstration using practice shapes (not the symbols you will learn).</p>');
   await btn('Start demo');
   S.practice.push(await runTrial({kind:'ls',target:['▲'],grid:['◆','▲','●'],audio:()=>speak('ah'),min:T(3000),max:T(30000),cond:S.cond,label:'demo-ls',progress:'Demo 1 of 2'}));
-  S.practice.push(await runTrial({kind:'ww',target:['▲','●','◆','■'],grid:DEMO_SYMS,audio:()=>speak('demo word'),min:T(3000),max:T(30000),cond:S.cond,label:'demo-ww',progress:'Demo 2 of 2'}));
+  S.practice.push(await runTrial({kind:'ww',target:['▲','●','◆','■'],grid:DEMO_SYMS,audio:async()=>{await speak('ro');await sleep(250);await speak('bot');await sleep(350);await speak('robot');},min:T(3000),max:T(30000),cond:S.cond,label:'demo-ww',progress:'Demo 2 of 2'}));
   page('<h2>Demo complete</h2><p>Next you will learn the real symbols, starting with single sounds.</p>');
   await btn();
 }

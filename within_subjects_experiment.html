@@ -550,7 +550,7 @@ async function demoMethods(){
     '<p>Here is a short demonstration using practice shapes — not the real symbols.</p>');
   await btn('Start demo');
   S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ls', progress:'Handwriting demo — 1 of 2'}));
-  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:()=>speak('demo word'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ww', progress:'Handwriting demo — 2 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{await speak('ro');await sleep(250);await speak('bot');await sleep(350);await speak('robot');}, min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ww', progress:'Handwriting demo — 2 of 2'}));
 
   // Demo selection method
   page('<h2>Response method 2 of 2: Symbol selection</h2>'+
@@ -558,7 +558,7 @@ async function demoMethods(){
     '<p>Here is a short demonstration using the same practice shapes.</p>');
   await btn('Start demo');
   S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ls', progress:'Selection demo — 1 of 2'}));
-  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:()=>speak('demo word'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ww', progress:'Selection demo — 2 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{await speak('ro');await sleep(250);await speak('bot');await sleep(350);await speak('robot');}, min:T(3000), max:T(30000), cond:'select', label:'demo-select-ww', progress:'Selection demo — 2 of 2'}));
 
   page('<h2>Both methods demonstrated</h2>'+
     '<p>You are now ready to begin training. The screen will tell you which method to use at the start of each section.</p>');
