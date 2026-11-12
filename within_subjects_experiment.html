@@ -243,17 +243,30 @@ function _testStats(test, testTab){
   const unt=per.filter(x=>x.type==='untrained'), prc=per.filter(x=>x.type==='practiced');
   const plays=ev.filter(e=>e.action==='play');
   const played=new Set(plays.map(e=>e.rec));
-  const items=per.map(item=>({
-    item_id:item.word, item_type:item.type,
-    exact_correct:item.correct,
-    selected_recordings:item.selectedRecordings,
-    correct_recording_ids:[item.word],
-    hits:item.selectedRecordings.includes(item.word)?1:0,
-    false_alarms:item.selectedRecordings.filter(r=>r!==item.word).length,
-    misses:item.selectedRecordings.includes(item.word)?0:1,
-    n_selections:item.selectedRecordings.length,
-    n_plays:plays.filter(p=>p.rec===item.word).length
-  }));
+  const items=per.map(item=>{
+    const wev=ev.filter(e=>e.word===item.word);
+    const selEvents=wev.filter(e=>e.action==='select-word');
+    const matchEvents=wev.filter(e=>e.action==='match');
+    const firstSelectedMs=selEvents.length?selEvents[0].t:null;
+    const finalMatchMs=matchEvents.length?matchEvents[matchEvents.length-1].t:null;
+    const itemRtMs=(firstSelectedMs!==null&&finalMatchMs!==null)?finalMatchMs-firstSelectedMs:null;
+    return {
+      item_id:item.word, item_type:item.type,
+      exact_correct:item.correct,
+      selected_recordings:item.selectedRecordings,
+      correct_recording_ids:[item.word],
+      hits:item.selectedRecordings.includes(item.word)?1:0,
+      false_alarms:item.selectedRecordings.filter(r=>r!==item.word).length,
+      misses:item.selectedRecordings.includes(item.word)?0:1,
+      n_selections:item.selectedRecordings.length,
+      n_plays:plays.filter(p=>p.rec===item.word).length,
+      first_selected_ms:firstSelectedMs,
+      final_match_ms:finalMatchMs,
+      item_rt_ms:itemRtMs
+    };
+  });
+  const rtVals=items.map(x=>x.item_rt_ms).filter(x=>x!==null);
+  const meanItemRtMs=rtVals.length?Math.round(rtVals.reduce((a,b)=>a+b,0)/rtVals.length):null;
   return {
     n_untrained_correct:unt.filter(x=>x.correct).length,
     pct_untrained:unt.length?+(100*unt.filter(x=>x.correct).length/unt.length).toFixed(1):null,
@@ -261,6 +274,7 @@ function _testStats(test, testTab){
     pct_practiced:prc.length?+(100*prc.filter(x=>x.correct).length/prc.length).toFixed(1):null,
     test_completion_ms:test.durationMs||null,
     test_time_to_first_ms:ev.length?ev[0].t:null,
+    test_mean_item_rt_ms:meanItemRtMs,
     test_total_plays:plays.length,
     test_unplayed_recordings:per.filter(x=>!played.has(x.word)).length,
     n_items_blank:per.filter(x=>!x.selectedRecordings||x.selectedRecordings.length===0).length,
