@@ -479,17 +479,35 @@ async function testPhase(){
     '<li>Click a written word to select it, then use ▶ to listen to recordings and press <b>Match</b> next to the recording(s) that match it.</li>'+
     '<li>A written word may match <b>one or more</b> recordings. Select every recording that matches.</li>'+
     '<li>Recordings stay available after matching, and you can play them as often as you like.</li>'+
-    '<li><b>Work as fast and as accurately as possible</b> — your completion time is recorded.</li>'+
-    '<li>Click Submit when finished. You will not receive feedback on accuracy.</li></ul>'+
+    '<li>The test has <b>two parts of 10 words each</b>. Click Submit after each part — Part 2 begins immediately.</li>'+
+    '<li><b>Work as fast and as accurately as possible</b> — your time across both parts is recorded.</li>'+
+    '<li>You will not receive feedback on accuracy.</li></ul>'+
     '<p>First, a short practice round with ordinary English words.</p>');
   await btn('Start practice');
   const pw=['red','blue','green'].map(x=>({id:x,disp:x,plain:true,play:()=>speak(x)}));
   S.practice.push({label:'practice-match',...await matchTask({title:'Practice',intro:'Match each written word to its recording.',words:pw,submitLabel:'Submit practice'})});
-  page('<h2>Practice complete</h2><p>The real test has <b>20 written words</b> and 20 recordings. Remember: speed and accuracy both matter.</p>');
+  page('<h2>Practice complete</h2><p>The real test has <b>20 words in two parts of 10</b>. Work through each part as fast and accurately as possible, then click Submit to move to the next part.</p>');
   await btn('Start test');
   const items=[...TEST_UNTRAINED.map(w=>({w,type:'untrained'})),...TEST_PRACTICED.map(w=>({w,type:'practiced'}))];
-  const words=items.map(it=>({id:it.w,disp:toGlyphs(it.w).join(''),play:()=>playWordOnly(it.w)}));
-  const res=await matchTask({title:'Matching test',intro:'Select a word, then match it to its recording(s). Click Submit when you are done.',words,submitLabel:'Submit'});
+
+  // Split into two balanced blocks of 10 (2 practiced + 8 untrained each)
+  const pracShuffle=shuffle(items.filter(x=>x.type==='practiced'));
+  const untShuffle=shuffle(items.filter(x=>x.type==='untrained'));
+  const block1Items=shuffle([...pracShuffle.slice(0,2),...untShuffle.slice(0,8)]);
+  const block2Items=shuffle([...pracShuffle.slice(2,4),...untShuffle.slice(8,16)]);
+  const toWord=it=>({id:it.w,disp:toGlyphs(it.w).join(''),play:()=>playWordOnly(it.w)});
+
+  const res1=await matchTask({title:'Matching test — Part 1 of 2',intro:'Match each written word to its recording. Click Submit when done with this set.',words:block1Items.map(toWord),submitLabel:'Submit Part 1'});
+  const res2=await matchTask({title:'Matching test — Part 2 of 2',intro:'Match each written word to its recording. Click Submit when done with this set.',words:block2Items.map(toWord),submitLabel:'Submit Part 2'});
+
+  // Merge results — offset block 2 timestamps by block 1 duration (gap excluded)
+  const res={
+    pairs:[...res1.pairs,...res2.pairs],
+    events:[...res1.events,...res2.events.map(e=>({...e,t:e.t+res1.durationMs}))],
+    plays:Object.fromEntries([...new Set([...Object.keys(res1.plays),...Object.keys(res2.plays)])].map(k=>[k,(res1.plays[k]||0)+(res2.plays[k]||0)])),
+    durationMs:res1.durationMs+res2.durationMs
+  };
+
   const per=items.map(it=>{
     const sel=res.pairs.filter(p=>p[0]===it.w).map(p=>p[1]);
     return {word:it.w,type:it.type,selectedRecordings:sel,correct:(sel.length===1&&sel[0]===it.w)};
