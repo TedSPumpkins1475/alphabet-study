@@ -549,16 +549,16 @@ async function demoMethods(){
     '<p>For one alphabet you will <b>copy each symbol or word by hand on your paper once</b>, then click Next to continue.</p>'+
     '<p>Here is a short demonstration using practice shapes — not the real symbols.</p>');
   await btn('Start demo');
-  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ls', progress:'Handwriting demo — 1 of 2'}));
-  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{await speak('ro');await sleep(250);await speak('bot');await sleep(350);await speak('robot');}, min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ww', progress:'Handwriting demo — 2 of 2'}));
+  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>playPhoneme('a'), min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ls', progress:'Handwriting demo — 1 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{for(const c of 'mini'){await playPhoneme(c);await sleep(250);}await sleep(350);await playClip('demo/mini.m4a','mini');}, min:T(3000), max:T(30000), cond:'hand', label:'demo-hand-ww', progress:'Handwriting demo — 2 of 2'}));
 
   // Demo selection method
   page('<h2>Response method 2 of 2: Symbol selection</h2>'+
     '<p>For the other alphabet you will <b>click symbols on screen</b> — first clicking the matching symbol in a grid of six, then clicking symbols in order to build whole words.</p>'+
     '<p>Here is a short demonstration using the same practice shapes.</p>');
   await btn('Start demo');
-  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>speak('ah'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ls', progress:'Selection demo — 1 of 2'}));
-  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{await speak('ro');await sleep(250);await speak('bot');await sleep(350);await speak('robot');}, min:T(3000), max:T(30000), cond:'select', label:'demo-select-ww', progress:'Selection demo — 2 of 2'}));
+  S.practice.push(await runTrial({kind:'ls', target:['▲'], grid:['◆','▲','●'], audio:()=>playPhoneme('a'), min:T(3000), max:T(30000), cond:'select', label:'demo-select-ls', progress:'Selection demo — 1 of 2'}));
+  S.practice.push(await runTrial({kind:'ww', target:['▲','●','◆','■'], grid:DEMO_SYMS, audio:async()=>{for(const c of 'mini'){await playPhoneme(c);await sleep(250);}await sleep(350);await playClip('demo/mini.m4a','mini');}, min:T(3000), max:T(30000), cond:'select', label:'demo-select-ww', progress:'Selection demo — 2 of 2'}));
 
   page('<h2>Both methods demonstrated</h2>'+
     '<p>You are now ready to begin training. The screen will tell you which method to use at the start of each section.</p>');
