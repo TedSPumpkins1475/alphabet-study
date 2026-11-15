@@ -481,12 +481,14 @@ async function setup(){
 }
 
 async function consent(){
-  page('<h2>Informed consent</h2>'+
-    '<p class="mute"><i>[Replace this paragraph with your IRB-approved consent text, contact information, and risks/benefits statement.]</i></p>'+
-    '<p>You will learn two small sets of new symbols and sounds, then complete short matching tests. '+
-    'Participation is voluntary and you may stop at any time. '+
-    'Your responses are stored under a participant code and kept separately from any contact information.</p>'+
-    '<label><input type="checkbox" class="c"> I agree to take part in this study.</label>'+
+  page('<h2>Informed Consent</h2>'+
+    '<p>During this study, you will learn <b>two new alphabets</b>, each made up of six symbols and speech sounds. '+
+    'You will listen to audio recordings of those sounds, practice copying symbols by hand on paper, and complete on-screen matching tests. '+
+    'The session takes approximately <b>20 minutes</b>. Please make sure your volume is turned up so you can hear the audio clearly.</p>'+
+    '<p>Participants must be <b>at least 18 years old</b>. Please take this study in a <b>quiet, distraction-free environment</b> with headphones or speakers and a working microphone. '+
+    'You may stop at any time.</p>'+
+    '<p>By checking the boxes below and clicking Continue, you consent to participating in this study and verify that you are at least 18 years old.</p>'+
+    '<label><input type="checkbox" class="c"> I agree to take part in this study and confirm I am at least 18 years old.</label>'+
     '<label><input type="checkbox" class="c"> I agree to have my <b>voice recorded</b> during the training portions.</label>'+
     '<label><input type="checkbox" class="c"> I agree to take and upload a <b>photograph of my paper</b> at the end.</label>');
   const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=true;
