@@ -493,7 +493,7 @@ async function consent(){
     '<label><input type="checkbox" class="c"> I agree to take and upload a <b>photograph of my paper</b> at the end.</label>');
   const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=true;
   const cs=[...app.querySelectorAll('.c')];
-  cs.forEach(c=>c.onchange=()=>b.disabled=!cs.every(x=>x.checked));
+  cs.forEach(c=>c.onchange=()=>b.disabled=!cs[0].checked);
   app.querySelector('.card').appendChild(b);
   await new Promise(r=>b.onclick=r);
 }
