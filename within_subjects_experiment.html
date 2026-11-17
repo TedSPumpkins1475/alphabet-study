@@ -162,7 +162,7 @@ const S = {
   mapVerA, mapVerB, glyphMapA: g_A, glyphMapB: g_B,
   startedAt: new Date().toISOString(),
   trials: {A:[], B:[]}, practice: [], test: {A:null, B:null},
-  adherence: null, audio: [], photo: null
+  adherence: null, photo: null
 };
 
 /* =====================  DATA LAYER  ===================== */
@@ -340,22 +340,6 @@ async function playWord(w){
   await playWordOnly(w);
 }
 
-/* microphone + recording */
-let stream = null;
-function startRec(label){
-  if(!stream || !window.MediaRecorder) return null;
-  const chunks=[]; const r=new MediaRecorder(stream);
-  r.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  r.start(); return {r, chunks, label};
-}
-function stopRec(h){
-  return new Promise(res=>{
-    if(!h){res();return;}
-    h.r.onstop=()=>{ S.audio.push({label:h.label, blob:new Blob(h.chunks,{type:h.r.mimeType||'audio/webm'})}); res(); };
-    h.r.stop();
-  });
-}
-
 /* =====================  TRIAL ENGINE  ===================== */
 function runTrial({kind, target, grid, audio, min, max, cond, label, progress}){
   return new Promise(resolve=>{
@@ -489,7 +473,6 @@ async function consent(){
     'You may stop at any time.</p>'+
     '<p>By checking the boxes below and clicking Continue, you consent to participating in this study and verify that you are at least 18 years old.</p>'+
     '<label><input type="checkbox" class="c"> I agree to take part in this study and confirm I am at least 18 years old.</label>'+
-    '<label><input type="checkbox" class="c"> I agree to have my <b>voice recorded</b> during the training portions.</label>'+
     '<label><input type="checkbox" class="c"> I agree to take and upload a <b>photograph of my paper</b> at the end.</label>'+
     '<hr style="margin:18px 0">'+
     '<p><b>Optional demographic information</b> — used for research purposes only. All questions are optional; the study will continue regardless of your responses.</p>'+
@@ -535,38 +518,17 @@ async function consent(){
 }
 
 async function micCheck(){
-  page('<h2>Audio and microphone check</h2>'+
-    '<p><b>1.</b> Click the button. You should hear a short tone.</p><button id="tone">Play sound</button>'+
-    '<label><input type="checkbox" id="heard"> I heard the sound clearly</label>'+
-    '<p><b>2.</b> Click "Enable microphone", allow access, and say a few words. The bar should move.</p>'+
-    '<button id="mic">Enable microphone</button><div class="meter"><div id="lvl"></div></div>'+
-    '<button id="rec" disabled>Record 3 seconds and play back</button>'+
-    '<label><input type="checkbox" id="heardme"> I heard my own voice in the playback</label><p id="msg" class="warn"></p>');
+  page('<h2>Audio check</h2>'+
+    '<p>Click the button below. You should hear a short tone. Make sure your volume is turned up.</p>'+
+    '<button id="tone">Play sound</button>'+
+    '<label><input type="checkbox" id="heard"> I heard the sound clearly</label>');
   const b=document.createElement('button'); b.className='primary'; b.textContent='Continue'; b.disabled=!DEBUG;
   app.querySelector('.card').appendChild(b);
-  const upd=()=>{ b.disabled=!DEBUG&&!(document.getElementById('heard').checked&&document.getElementById('heardme').checked&&stream); };
-  document.getElementById('heard').onchange=upd; document.getElementById('heardme').onchange=upd;
+  const upd=()=>{ b.disabled=!DEBUG&&!document.getElementById('heard').checked; };
+  document.getElementById('heard').onchange=upd;
   document.getElementById('tone').onclick=()=>{
     const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),gn=ctx.createGain();
     o.frequency.value=440; gn.gain.value=.15; o.connect(gn); gn.connect(ctx.destination); o.start(); setTimeout(()=>{o.stop();ctx.close();},700);
-  };
-  document.getElementById('mic').onclick=async()=>{
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      const ctx=new(window.AudioContext||window.webkitAudioContext)(),an=ctx.createAnalyser();
-      ctx.createMediaStreamSource(stream).connect(an); const buf=new Uint8Array(an.fftSize);
-      const lv=document.getElementById('lvl');
-      (function loop(){ if(!document.body.contains(lv)){ctx.close();return;} an.getByteTimeDomainData(buf);
-        let m=0; for(const v of buf)m=Math.max(m,Math.abs(v-128)); lv.style.width=Math.min(100,m*1.6)+'%'; requestAnimationFrame(loop); })();
-      document.getElementById('rec').disabled=false; document.getElementById('msg').textContent=''; upd();
-    }catch(e){ document.getElementById('msg').textContent='Microphone access was blocked. Please allow it in your browser and try again.'; }
-  };
-  document.getElementById('rec').onclick=async()=>{
-    const r=document.getElementById('rec'); r.disabled=true; r.textContent='Recording…';
-    const h=startRec('mic-check'); await sleep(3000);
-    await new Promise(res=>{ h.r.onstop=res; h.r.stop(); });
-    const url=URL.createObjectURL(new Blob(h.chunks,{type:h.r.mimeType||'audio/webm'}));
-    r.textContent='Playing back…'; const a=new Audio(url); a.onended=()=>{ r.disabled=false; r.textContent='Record again'; }; a.play();
   };
   await new Promise(r=>b.onclick=r);
 }
@@ -612,7 +574,6 @@ async function lsTraining(alpha, A){
     'There are 12 short trials. Each lasts at least 5 seconds — do not rush ahead.</p>'+
     '<p>After hearing each sound, repeat it aloud <b>once</b>, then <b>'+methodDesc+'</b>.</p>');
   await btn('Start');
-  const rec=startRec(alpha+'-letter-sound');
   const bl=blocks(P,2); let k=0;
   for(let b=0;b<2;b++) for(const p of bl[b]){
     k++;
@@ -621,7 +582,6 @@ async function lsTraining(alpha, A){
     S.trials[alpha].push(r);
     page('<div class="fix">+</div>'); await sleep(T(350));
   }
-  await stopRec(rec);
 }
 
 async function wwTraining(alpha, A){
@@ -633,7 +593,6 @@ async function wwTraining(alpha, A){
     'Repeat the whole word aloud <b>once</b>, blending the sounds, then <b>'+methodDesc+'</b>.</p>'+
     '<p>There are 6 trials. Each lasts at least 8 seconds.</p>');
   await btn('Start');
-  const rec=startRec(alpha+'-whole-word');
   const bl=[shuffle(A.ww)]; let k=0;
   for(let b=0;b<1;b++) for(const w of bl[b]){
     k++;
@@ -642,7 +601,6 @@ async function wwTraining(alpha, A){
     S.trials[alpha].push(r);
     page('<div class="fix">+</div>'); await sleep(T(350));
   }
-  await stopRec(rec);
 }
 
 async function coverPaper(alpha){
@@ -784,7 +742,6 @@ async function finish(){
     deviations:S.adherence?.deviations==='Yes',
     adherence_notes:S.adherence?.explanation||'',
     photo_uploaded:!!S.photo,
-    voice_recordings_n:S.audio?.length||0,
     raw_json:json.slice(0,99000)
   });
   localStorage.setItem('alphabet_study_done','1');
@@ -794,7 +751,6 @@ async function finish(){
   const dl=document.getElementById('dl');
   const add=(blob,name)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.textContent='Download '+name; a.style.display='block'; a.style.margin='6px 0'; dl.appendChild(a); };
   add(new Blob([json],{type:'application/json'}), S.pid+'_data.json');
-  S.audio.forEach(a=>add(a.blob, S.pid+'_'+a.label+'.webm'));
   if(S.photo) add(S.photo, S.pid+'_paper_'+S.photo.name);
   window.__studyData=data;
 }
@@ -836,14 +792,14 @@ async function finish(){
 
     const demo=await consent(); _logPhase('consent');
     await _atPatch('ExpSessions', _DL.sessionRecId, {
-      consent_participate:true, consent_voice:true, consent_photo:true,
+      consent_participate:true, consent_photo:true,
       consent_at:new Date().toISOString(),
       ...demo
     });
 
     await micCheck(); _logPhase('mic_check');
     await _atPatch('ExpSessions', _DL.sessionRecId, {
-      audio_check_passed:true, mic_check_passed:true,
+      audio_check_passed:true,
       last_phase_completed:'mic_check'
     });
 
